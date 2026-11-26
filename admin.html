@@ -1,0 +1,159 @@
+<!doctype html><html lang="uk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Адміністратор</title><link rel="stylesheet" href="style.css"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0a2540"><script src="pwa.js" defer></script>
+</head><body>
+<header id="top"></header>
+<main>
+<nav class="tabs"><button data-t="dash" class="on">Аналітика</button><button data-t="needs">Потреби</button><button data-t="ent">Підприємства</button><button data-t="dir">Довідники</button></nav>
+<section id="dash"><div class="dash-head"><div><h2>Аналітична панель</h2><p class="muted">Огляд заявлених потреб на основі актуальних даних системи</p></div><button id="refreshDash" class="ghost">Оновити дані</button></div><div id="dashboard" aria-live="polite"></div></section>
+
+<section id="needs" hidden>
+  <div class="bar">
+    <select id="fe"></select><select id="fs"></select>
+    <select id="fst"><option value="">Усі статуси</option><option value="new">Нова</option><option value="approved">Схвалена</option><option value="rejected">Відхилена</option></select>
+    <select id="fu"><option value="">Уся терміновість</option><option>нагальна</option><option>термінова</option><option>перспективна</option></select>
+    <input id="q" placeholder="Пошук за назвою / виробником">
+  </div>
+  <div id="ntable" class="wrap"></div>
+</section>
+
+<section id="ent" hidden>
+  <div id="stats" class="wrap"></div>
+  <h3>Підприємства (додати, перейменувати, видалити)</h3><div id="entcrud" class="wrap"></div>
+  <p class="muted">Паролі підприємств задаються в базі скриптом (див. інструкцію). Новий користувач прив'язується командою <code>select nl_link_user('email','КОД');</code> у SQL Editor.</p>
+</section>
+
+<section id="dir" hidden>
+  <h3>Сектори (код, назва, назва англійською)</h3><div id="sec" class="wrap"></div>
+  <h3>Куди подавати (назва, вимоги)</h3><div id="dst" class="wrap"></div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script><script src="common.js"></script>
+<script>
+let U, ents = [], secs = [], dsts = [], needs = [];
+(async () => {
+  U = await requireUser('admin'); if (!U) return; topbar(U);
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+    ['dash', 'needs', 'ent', 'dir'].forEach(s => $(s).hidden = s !== b.dataset.t);
+    if (b.dataset.t === 'dash') loadDashboard();
+    if (b.dataset.t === 'ent') loadEnt();
+    if (b.dataset.t === 'dir') loadDir();
+  });
+  ['fe', 'fs', 'fst', 'fu', 'q'].forEach(id => $(id).oninput = renderNeeds);
+  await loadRefs(); await loadNeeds(); await loadDashboard();
+  $('refreshDash').onclick = loadDashboard;
+})();
+
+async function loadDashboard() {
+  const host = $('dashboard');
+  host.innerHTML = '<p class="muted">Завантаження аналітики…</p>';
+  const [nr, er, sr, dr] = await Promise.all([
+    sb.from('nl_needs').select('id,enterprise_id,sector_id,destination_ids,status,urgency,quantity,unit_price_usd,total_usd,created_at'),
+    sb.from('nl_enterprises').select('id,name').order('name'),
+    sb.from('nl_sectors').select('id,code,name_ua').order('code'),
+    sb.from('nl_destinations').select('id,name').order('name')
+  ]);
+  const failed = [nr, er, sr, dr].find(x => x.error);
+  if (failed) { host.innerHTML = `<p class="err">Не вдалося завантажити аналітику: ${esc(failed.error.message)}</p>`; return; }
+  const ns = nr.data || [], es = er.data || [], ss = sr.data || [], ds = dr.data || [];
+  const money = n => Number(n || 0);
+  const total = ns.reduce((a,n) => a + money(n.total_usd), 0);
+  const count = status => ns.filter(n => n.status === status).length;
+  const entMap = Object.fromEntries(es.map(x => [x.id, x.name]));
+  const secMap = Object.fromEntries(ss.map(x => [x.id, x.code + ' — ' + x.name_ua]));
+  const destMap = Object.fromEntries(ds.map(x => [x.id, x.name]));
+  const aggregate = (keyFn) => {
+    const m = new Map(); ns.forEach(n => { const k = keyFn(n) || 'Не визначено'; const a=m.get(k)||{count:0,sum:0}; a.count++; a.sum+=money(n.total_usd); m.set(k,a); });
+    return [...m.entries()].map(([name,v])=>({name,...v})).sort((a,b)=>b.sum-a.sum);
+  };
+  const priorities = ['нагальна','термінова','перспективна'].map(name => ({name,count:ns.filter(n=>n.urgency===name).length,sum:ns.filter(n=>n.urgency===name).reduce((a,n)=>a+money(n.total_usd),0)}));
+  const sectors = aggregate(n => secMap[n.sector_id]);
+  const enterprises = aggregate(n => entMap[n.enterprise_id]);
+  const destAgg = new Map(); ns.forEach(n => { const ids=(n.destination_ids||[]); if(!ids.length) { const a=destAgg.get('Не визначено')||{count:0,sum:0};a.count++;a.sum+=money(n.total_usd);destAgg.set('Не визначено',a); } else ids.forEach(id=>{const k=destMap[id]||'Невідомий адресат';const a=destAgg.get(k)||{count:0,sum:0};a.count++;a.sum+=money(n.total_usd);destAgg.set(k,a);}); }); const destinations=[...destAgg.entries()].map(([name,v])=>({name,...v})).sort((a,b)=>b.sum-a.sum);
+  const maxBar = arr => Math.max(1,...arr.map(x=>x.sum));
+  const bars = (arr, max, label='sum') => arr.length ? arr.slice(0,8).map(x=>`<div class="bar-row"><div class="bar-label" title="${esc(x.name)}">${esc(x.name)}</div><div class="bar-track"><span style="width:${Math.max(1,x[label]/max*100)}%"></span></div><div class="bar-value">${label==='count'?x.count:fmt(x.sum)+' $'}</div></div>`).join('') : '<p class="muted">Немає даних</p>';
+  const pct = n => ns.length ? Math.round(n/ns.length*100) : 0;
+  host.innerHTML = `<div class="kpi-grid">
+    <article class="kpi"><span>Усього позицій</span><strong>${ns.length.toLocaleString('uk-UA')}</strong><small>Усі статуси</small></article>
+    <article class="kpi"><span>Загальна вартість</span><strong>${fmt(total)} <small>USD</small></strong><small>За всіма заявками</small></article>
+    <article class="kpi"><span>Підприємства</span><strong>${new Set(ns.map(n=>n.enterprise_id)).size}</strong><small>Із ${es.length} зареєстрованих</small></article>
+    <article class="kpi"><span>Схвалено</span><strong>${count('approved')}</strong><small>${pct(count('approved'))}% від усіх позицій</small></article>
+    <article class="kpi"><span>На розгляді</span><strong>${count('new')}</strong><small>Нові заявки</small></article>
+    <article class="kpi"><span>Відхилено</span><strong>${count('rejected')}</strong><small>${pct(count('rejected'))}% від усіх позицій</small></article>
+  </div>
+  <div class="dash-grid">
+    <article class="dash-card"><h3>Фінансова структура за терміновістю</h3>${priorities.map(x=>`<div class="priority-line"><span>${esc(x.name)}</span><b>${fmt(x.sum)} USD</b><small>${x.count} поз. · ${pct(x.count)}%</small></div>`).join('')}</article>
+    <article class="dash-card"><h3>Статуси заявок</h3><div class="status-list">${[['Схвалені',count('approved'),'approved'],['Нові',count('new'),'new'],['Відхилені',count('rejected'),'rejected']].map(x=>`<div><span>${x[0]}</span><b>${x[1]}</b><div class="status-track"><i class="${x[2]}" style="width:${pct(x[1])}%"></i></div></div>`).join('')}</div></article>
+    <article class="dash-card"><h3>Потреби за секторами</h3>${bars(sectors,maxBar(sectors))}</article>
+    <article class="dash-card"><h3>Підприємства за сумою потреб</h3>${bars(enterprises,maxBar(enterprises))}</article>
+    <article class="dash-card"><h3>Розподіл за місцями подання</h3>${bars(destinations,maxBar(destinations))}</article>
+    <article class="dash-card"><h3>Ключові показники</h3><div class="metric-list"><div><span>Середня вартість позиції</span><b>${fmt(ns.length?total/ns.length:0)} USD</b></div><div><span>Позицій без сектору</span><b>${ns.filter(n=>!n.sector_id).length}</b></div><div><span>Позицій без місця подання</span><b>${ns.filter(n=>!(n.destination_ids||[]).length).length}</b></div><div><span>Позицій із нагальним пріоритетом</span><b>${priorities[0].count}</b></div></div></article>
+  </div><p class="muted dash-note">Дані відображають поточний стан реєстру. Суми розраховуються за полем total_usd; розподіл за місцями подання враховує всі призначені адресати.</p>`;
+}
+
+async function loadRefs() {
+  [ents, secs, dsts] = (await Promise.all([
+    sb.from('nl_enterprises').select('*').order('name'),
+    sb.from('nl_sectors').select('*').order('code'),
+    sb.from('nl_destinations').select('*').order('name')])).map(r => r.data || []);
+  const opt = (a, first, lf) => `<option value="">${first}</option>` + a.map(x => `<option value="${x.id}">${esc(lf(x))}</option>`).join('');
+  $('fe').innerHTML = opt(ents, 'Усі підприємства', x => x.name);
+  $('fs').innerHTML = opt(secs, 'Усі сектори', x => x.code + ' — ' + x.name_ua) + '<option value="none">— без сектору —</option>';
+}
+async function loadNeeds() {
+  needs = (await sb.from('nl_needs').select('*').order('created_at', {ascending: false})).data || [];
+  renderNeeds();
+}
+function renderNeeds() {
+  const q = $('q').value.toLowerCase(), e = $('fe').value, s = $('fs').value, st = $('fst').value, u = $('fu').value;
+  const list = needs.filter(n => (!e || n.enterprise_id === e)
+    && (!s || (s === 'none' ? !n.sector_id : String(n.sector_id) === s))
+    && (!st || n.status === st) && (!u || n.urgency === u)
+    && (!q || (n.name + ' ' + (n.manufacturers || '')).toLowerCase().includes(q)));
+  const en = Object.fromEntries(ents.map(x => [x.id, x.name]));
+  $('ntable').innerHTML = `<table><tr><th>Підприємство</th><th>Потреба</th><th>К-сть</th><th>Ціна</th><th>Сума</th><th>Терміновість</th><th>Сектор</th><th>Куди подавати</th><th>Статус</th><th></th></tr>` +
+    list.map(n => `<tr data-id="${n.id}"><td>${esc(en[n.enterprise_id])}</td>
+    <td><b>${esc(n.name)}</b><br><small>${esc(n.specs)}</small><br><small>${esc(n.justification)}</small></td>
+    <td>${n.quantity} ${esc(n.unit)}</td><td class="r">${fmt(n.unit_price_usd)}</td><td class="r">${fmt(n.total_usd)}</td><td>${esc(n.urgency)}</td>
+    <td><select class="sec"><option value="">—</option>${secs.map(x => `<option value="${x.id}" ${x.id === n.sector_id ? 'selected' : ''}>${esc(x.code)}</option>`).join('')}</select></td>
+    <td><select class="dst" multiple size="3">${dsts.map(d => `<option value="${d.id}" ${(n.destination_ids || []).includes(d.id) ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></td>
+    <td><select class="st">${Object.keys(STATUS).map(x => `<option value="${x}" ${n.status === x ? 'selected' : ''}>${STATUS[x]}</option>`).join('')}</select></td>
+    <td><button class="sv">Зберегти</button> <button class="danger dl">✕</button></td></tr>`).join('') +
+    `</table><p><b>Разом: ${fmt(list.reduce((a, n) => a + Number(n.total_usd), 0))} USD</b> (позицій: ${list.length})</p>`;
+  $('ntable').querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    tr.querySelector('.sv').onclick = async () => {
+      const sv = tr.querySelector('.sec').value;
+      const rec = {sector_id: sv ? +sv : null,
+        destination_ids: [...tr.querySelector('.dst').selectedOptions].map(o => +o.value),
+        status: tr.querySelector('.st').value};
+      const {error} = await sb.from('nl_needs').update(rec).eq('id', id);
+      if (error) return alert(error.message);
+      Object.assign(needs.find(n => n.id === id), rec); alert('Збережено');
+    };
+    tr.querySelector('.dl').onclick = async () => {
+      if (!confirm('Видалити позицію?')) return;
+      const {error} = await sb.from('nl_needs').delete().eq('id', id);
+      if (error) return alert(error.message); loadNeeds();
+    };
+  });
+}
+async function loadEnt() {
+  await loadRefs();
+  const {data} = await sb.from('nl_needs').select('enterprise_id,total_usd,status');
+  const {data: pr} = await sb.from('nl_profiles').select('enterprise_id').eq('role', 'enterprise');
+  const has = new Set((pr || []).map(p => p.enterprise_id)), agg = {};
+  (data || []).forEach(n => { const a = agg[n.enterprise_id] ??= {c: 0, s: 0, nw: 0}; a.c++; a.s += +n.total_usd; if (n.status === 'new') a.nw++; });
+  $('stats').innerHTML = `<table><tr><th>Підприємство</th><th>Код</th><th>Обліковий запис</th><th>Позицій</th><th>Нових</th><th>Сума, USD</th></tr>` +
+    ents.map(e => { const a = agg[e.id] || {c: 0, s: 0, nw: 0};
+      return `<tr><td>${esc(e.name)}</td><td>${esc(e.code)}</td><td>${has.has(e.id) ? 'є' : '<span class="err">немає</span>'}</td><td>${a.c}</td><td>${a.nw}</td><td class="r">${fmt(a.s)}</td></tr>`; }).join('') +
+    `<tr><th colspan="3">Разом</th><th>${Object.values(agg).reduce((x, a) => x + a.c, 0)}</th><th></th><th class="r">${fmt(Object.values(agg).reduce((x, a) => x + a.s, 0))}</th></tr></table>`;
+  crud('nl_enterprises', [['code', 'Код'], ['name', 'Назва'], ['name_en', 'Назва англійською']], $('entcrud'));
+}
+function loadDir() {
+  crud('nl_sectors', [['code', 'Код'], ['name_ua', 'Назва'], ['name_en', 'Англійською']], $('sec'));
+  crud('nl_destinations', [['name', 'Назва'], ['requirements', 'Вимоги до подання']], $('dst'));
+}
+</script></body></html>

@@ -1,0 +1,204 @@
+<!doctype html><html lang="uk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Перелік потреб — вхід</title><link rel="stylesheet" href="style.css">
+<style>
+:root{--navy:#0a2540;--sea:#1f6fa8;--sand:#f6f1e7;--amber:#e0a030;--ink:#1b2733;--muted:#5c6b78}
+/* базовий розмір масштабується від розмірів вікна, усе інше — в rem */
+html{font-size:clamp(14px,calc(.55vw + .9vh),24px);height:100%}
+body{font-size:1rem;background:var(--sand);color:var(--ink);display:grid;grid-template-rows:auto 1fr auto;min-height:100vh;min-height:100dvh;overflow-x:hidden}
+input,select,textarea,button{font-size:1rem}
+
+/* шапка */
+.hdr{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:var(--navy);color:#fff;
+  padding:.8rem 2.5rem;border-bottom:.2rem solid var(--amber)}
+.hdr b{font-size:1.15rem;letter-spacing:.02em}
+#clock{font-size:.85rem;opacity:.85;white-space:nowrap}
+
+/* ліва панель */
+.split{display:grid;grid-template-columns:1.1fr 1fr;min-height:0}
+.brand{position:relative;overflow:hidden;min-height:0;color:#fff;background:linear-gradient(160deg,var(--navy),#123f68);
+  padding:1.5rem 2.5rem 0;display:flex;flex-direction:column}
+.intro{margin:auto 0;display:flex;flex-direction:column;gap:1.3rem}
+.brand h1{font-size:2.4rem;line-height:1.2;margin:0;max-width:38rem}
+.brand p{max-width:36rem;margin:0;color:#cfe0ee;font-size:1.05rem;line-height:1.45}
+.feats{display:grid;grid-template-columns:1fr 1fr;gap:1rem;max-width:40rem}
+.feat{background:#ffffff14;border:1px solid #ffffff2e;border-left:.22rem solid var(--amber);border-radius:.7rem;padding:1rem 1.1rem;font-size:.95rem;line-height:1.4;color:#d6e5f2}
+.feat b{display:block;color:#fff;font-size:1.05rem;margin-bottom:.3rem}
+.steps{list-style:none;margin:0;padding:0 0 7rem;display:grid;grid-template-columns:repeat(4,1fr);gap:1.1rem;counter-reset:s;position:relative;z-index:1;max-width:44rem}
+.steps li{counter-increment:s;font-size:.85rem;color:#cfe0ee;line-height:1.35}
+.steps li::before{content:counter(s);display:grid;place-items:center;width:2rem;height:2rem;margin-bottom:.5rem;border-radius:50%;background:var(--navy);color:var(--amber);font-weight:700;box-shadow:0 0 0 2px var(--sea)}
+.steps b{display:block;color:#fff;font-size:.95rem}
+.wave{position:absolute;left:0;bottom:0;width:100%;height:5.5rem}
+
+/* права панель */
+.login{display:flex;flex-direction:column;align-items:center;overflow:auto;padding:1rem 2rem;min-height:0;max-width:none;margin:0}
+.inner{margin:auto 0;width:100%;max-width:27rem;display:flex;flex-direction:column;gap:.8rem}
+.box{background:#fff;border-radius:1rem;padding:1.8rem;box-shadow:0 8px 30px #0a254022;border-top:.3rem solid var(--amber)}
+.box h2{margin:0 0 .3rem;color:var(--navy);font-size:1.6rem}
+.sub{margin:0 0 1.1rem;color:var(--muted);font-size:.9rem}
+.box form{display:flex;flex-direction:column;gap:1rem}
+label{font-size:.9rem}
+.box select,.box input{padding:.75rem;border-radius:.5rem;width:100%}
+.box select:focus,.box input:focus{outline:2px solid #1f6fa855;border-color:var(--sea)}
+.pwd{position:relative;display:flex}.pwd input{padding-right:3rem}
+.pwd button{position:absolute;right:2px;top:2px;bottom:2px;background:none;color:var(--muted);padding:0 .8rem}
+.go{background:linear-gradient(90deg,var(--navy),var(--sea));font-weight:700;padding:.85rem;border-radius:.5rem}
+.adm{font-size:.9rem;color:var(--sea);cursor:pointer;text-decoration:underline;align-self:flex-start;display:inline-block;margin-top:.8rem}
+#msg{margin:0}
+details{background:#fff;border-radius:.7rem;padding:.7rem 1rem;box-shadow:0 1px 3px #0a254014}
+summary{cursor:pointer;font-weight:600;color:var(--navy);font-size:.95rem}
+details p,details ol{font-size:.9rem;color:#4b5b66;margin:.5rem 0 0;padding-left:1.2rem}
+details p{padding-left:0}
+footer{background:var(--navy);color:#9fb7cc;text-align:center;font-size:.8rem;padding:.7rem 1rem}
+
+/* вузькі / низькі екрани: дозволяємо прокрутку */
+@media(max-width:900px),(max-height:520px){
+  html{font-size:15px}
+  body{min-height:100vh;min-height:100dvh;height:auto;overflow-x:hidden;overflow-y:auto;display:block}
+  .hdr{padding:.8rem 1rem;flex-direction:column;align-items:flex-start;gap:.3rem}
+  .split{grid-template-columns:1fr}
+  .brand{padding:1.5rem 1.2rem 0}
+  .steps{grid-template-columns:1fr 1fr;padding-bottom:6rem}
+  .feats{grid-template-columns:1fr}
+  .login{overflow:visible;padding:1rem .85rem 1.5rem}
+  .inner{max-width:34rem;margin:0 auto}
+  .box{padding:1.25rem}
+  .box select,.box input,.go{min-height:48px}
+  .hdr{padding-top:calc(.8rem + env(safe-area-inset-top))}
+  footer{padding-bottom:calc(.7rem + env(safe-area-inset-bottom))}
+}
+</style><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0a2540"><script src="pwa.js" defer></script>
+</head>
+<body>
+<header class="hdr">
+  <b>Міністерство з відновлення, інфраструктури та транспорту України</b>
+  <span id="clock"></span>
+</header>
+
+<div class="split">
+  <aside class="brand">
+    <div class="intro">
+      <h1>Перелік потреб для залучення міжнародної допомоги</h1>
+      <p>Підприємства галузі вносять свої потреби в єдину базу, а адміністратор систематизує їх і формує звіти та запити для міжнародних партнерів і грантових програм.</p>
+      <div class="feats">
+        <div class="feat"><b>Єдина база</b>Усі потреби підприємств зберігаються в одному місці та доступні для аналізу.</div>
+        <div class="feat"><b>Автоматичні розрахунки</b>Сукупна вартість позиції рахується як кількість × вартість одиниці.</div>
+        <div class="feat"><b>Звіти за адресатами</b>Переліки залежно від місця подання, з експортом в Excel і PDF.</div>
+        <div class="feat"><b>Захищений доступ</b>Кожне підприємство має окремий пароль і бачить лише свої дані.</div>
+      </div>
+    </div>
+    <ol class="steps">
+      <li><b>Увійдіть</b>Оберіть підприємство та введіть пароль.</li>
+      <li><b>Внесіть потреби</b>Заповніть форму з переліком позицій.</li>
+      <li><b>Підрахунок</b>Система рахує вартість позицій і підсумок.</li>
+      <li><b>Звіти</b>Адміністратор призначає сектор і формує звіти.</li>
+    </ol>
+    <svg class="wave" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true"><path d="M0,60 C200,100 400,20 600,60 C800,100 1000,20 1200,60 L1200,120 L0,120 Z" fill="#ffffff14"/><path d="M0,80 C200,110 450,50 650,80 C850,110 1000,60 1200,85 L1200,120 L0,120 Z" fill="#ffffff22"/></svg>
+  </aside>
+
+  <main class="login">
+    <div class="inner">
+      <div class="box">
+        <h2>Вхід до системи</h2>
+        <p class="sub">Оберіть підприємство й введіть пароль, який видав адміністратор.</p>
+        <form id="f">
+          <label>Підприємство<select id="who" required disabled><option value="">Підключення до системи…</option></select></label>
+          <label>Пароль
+            <span class="pwd"><input id="pw" type="password" placeholder="Введіть пароль…" required autocomplete="current-password">
+            <button type="button" id="eye" title="Показати пароль">👁</button></span></label>
+          <button class="go">Увійти</button>
+          <p id="msg" class="err"></p>
+        </form>
+        <a class="adm" id="admlink">Вхід для адміністратора системи</a>
+      </div>
+      <details><summary>Порядок внесення потреб</summary>
+        <ol><li>Увійдіть під своїм підприємством.</li><li>Заповніть форму, усі поля із зірочкою обов'язкові.</li>
+        <li>Для англомовних звітів заповніть «Назву англійською» й «Обґрунтування англійською».</li>
+        <li>Позиції можна змінювати й видаляти, після зміни вони знову йдуть на розгляд адміністратору.</li></ol></details>
+      <details><summary>Контакти підтримки</summary>
+        <!-- ВПИШІТЬ КОНТАКТИ: телефон, email, відповідальна особа -->
+        <p>З питань доступу й паролів звертайтеся до адміністратора системи.</p></details>
+    </div>
+  </main>
+</div>
+<footer>© 2026 Усі права захищено. Міністерство з відновлення, інфраструктури та транспорту України | Департамент морського та внутрішнього водного транспорту</footer>
+
+<script>
+const DOMAIN = 'needs.example';
+const tick = () => document.getElementById('clock').textContent = 'Київ: ' + new Date().toLocaleString('uk-UA', {timeZone: 'Europe/Kyiv', dateStyle: 'short', timeStyle: 'medium'});
+tick(); setInterval(tick, 1000);
+
+const el = id => document.getElementById(id);
+el('eye').addEventListener('click', () => el('pw').type = el('pw').type === 'password' ? 'text' : 'password');
+el('admlink').addEventListener('click', () => { el('who').value = 'ADMIN'; el('pw').focus(); });
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src; script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Не вдалося завантажити бібліотеку: ' + src));
+    document.head.appendChild(script);
+  });
+}
+function showLoadError(message) {
+  el('who').disabled = true;
+  el('who').innerHTML = '<option value="">Список підприємств недоступний</option>';
+  el('msg').textContent = message;
+  if (!el('retry')) {
+    const b = document.createElement('button'); b.type = 'button'; b.id = 'retry'; b.className = 'ghost';
+    b.textContent = 'Повторити підключення'; b.addEventListener('click', initLogin);
+    el('f').appendChild(b);
+  }
+}
+
+async function initLogin() {
+  el('msg').textContent = 'Підключення…';
+  el('who').disabled = true;
+  el('who').innerHTML = '<option value="">Підключення до системи…</option>';
+  try {
+    if (!window.supabase) {
+      try { await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'); }
+      catch (_) { await loadScript('https://unpkg.com/@supabase/supabase-js@2'); }
+    }
+    if (!window.APP_CONFIG) await loadScript('config.js');
+    if (!window.sb && !window.getUser) await loadScript('common.js');
+    if (!window.supabase || !window.APP_CONFIG || typeof sb === 'undefined') throw new Error('Не завантажено компоненти системи. Перевірте інтернет-з’єднання та відкрийте сайт через HTTPS.');
+
+    const user = await Promise.race([
+      getUser(), new Promise((_, reject) => setTimeout(() => reject(new Error('Час очікування підключення минув. Перевірте інтернет або доступ до Supabase.')), 12000))
+    ]);
+    if (user) { home(user.profile.role); return; }
+
+    const result = await Promise.race([
+      sb.rpc('nl_login_list'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase не відповідає. Спробуйте ще раз або відкрийте систему через HTTPS.')), 12000))
+    ]);
+    if (result.error) throw new Error('Помилка завантаження підприємств: ' + result.error.message);
+    if (!Array.isArray(result.data) || result.data.length === 0) throw new Error('Список підприємств порожній або функція nl_login_list не повернула дані. Перевірте налаштування Supabase.');
+
+    el('who').innerHTML = '<option value="" disabled selected>— Оберіть підприємство зі списку —</option>' +
+      result.data.map(x => `<option value="${esc(x.code)}">${esc(x.name)}</option>`).join('') +
+      '<option value="ADMIN">Адміністратор системи</option>';
+    el('who').disabled = false;
+    el('msg').textContent = '';
+    const retry = el('retry'); if (retry) retry.remove();
+  } catch (error) {
+    console.error('NeedsList login initialization:', error);
+    showLoadError(error && error.message ? error.message : 'Невідома помилка підключення.');
+  }
+}
+
+el('f').addEventListener('submit', async event => {
+  event.preventDefault(); el('msg').textContent = '';
+  if (!el('who').value) { el('msg').textContent = 'Оберіть підприємство.'; return; }
+  try {
+    const {error} = await sb.auth.signInWithPassword({email: `${el('who').value.toLowerCase()}@${DOMAIN}`, password: el('pw').value});
+    if (error) { el('msg').textContent = 'Не вдалося увійти: перевірте пароль або зверніться до адміністратора.'; return; }
+    const user = await getUser();
+    if (!user) { await sb.auth.signOut(); el('msg').textContent = 'Обліковий запис не прив’язаний до підприємства. Зверніться до адміністратора.'; return; }
+    home(user.profile.role);
+  } catch (error) { console.error(error); el('msg').textContent = 'Помилка з’єднання із сервером. Перевірте інтернет і повторіть спробу.'; }
+});
+initLogin();
+</script></body></html>

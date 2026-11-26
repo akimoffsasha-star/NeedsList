@@ -1,0 +1,25 @@
+{
+  "name": "NeedsList — система обліку потреб та міжнародної допомоги",
+  "short_name": "NeedsList",
+  "description": "Реєстр потреб, проєктний портфель, міжнародна допомога та моніторинг результатів.",
+  "lang": "uk",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f1e7",
+  "theme_color": "#0a2540",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

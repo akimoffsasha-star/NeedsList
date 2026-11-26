@@ -1,0 +1,73 @@
+<!doctype html><html lang="uk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Мої потреби</title><link rel="stylesheet" href="style.css"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0a2540"><script src="pwa.js" defer></script>
+</head><body>
+<header id="top"></header>
+<main>
+<h2>Ініціатор: <span id="initiator"></span></h2>
+<form id="f" class="card grid">
+  <label>Найменування потреби*<input id="name" required></label>
+  <label>Назва англійською (для звітів)<input id="name_en"></label>
+  <label>Одиниці виміру*<input id="unit" required placeholder="шт., компл., м…"></label>
+  <label>Кількість*<input id="quantity" type="number" min="0.01" step="0.01" required></label>
+  <label>Вартість одиниці, USD*<input id="price" type="number" min="0" step="0.01" required></label>
+  <label>Сукупна вартість, USD (автоматично)<input id="total" readonly></label>
+  <label>Терміновість*<select id="urgency"><option>нагальна</option><option>термінова</option><option>перспективна</option></select></label>
+  <label>Країна виробника<input id="country"></label>
+  <label>Виробники (назви підприємств)<input id="manufacturers"></label>
+  <label class="wide">Характеристики<textarea id="specs" rows="2"></textarea></label>
+  <label class="wide">Обґрунтування (до 500 знаків)<textarea id="justification" maxlength="500" rows="3"></textarea><small id="cnt">0/500</small></label>
+  <label class="wide">Обґрунтування англійською (до 500 знаків, для міжнародних партнерів)<textarea id="justification_en" maxlength="500" rows="3"></textarea></label>
+  <p class="wide muted">Сектор і місце подання визначає адміністратор. Після вашої правки позиція знову отримує статус «Нова».</p>
+  <div class="wide"><button>Зберегти</button> <button type="button" id="cancel" class="ghost">Скасувати редагування</button></div>
+</form>
+<div id="list" class="wrap"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script><script src="common.js"></script>
+<script>
+let U, editId = null, rows = [];
+const v = id => $(id).value.trim();
+(async () => {
+  U = await requireUser('enterprise'); if (!U) return;
+  topbar(U); $('initiator').textContent = U.profile.enterprises.name; load();
+})();
+const calc = () => $('total').value = fmt((+$('quantity').value || 0) * (+$('price').value || 0));
+$('quantity').oninput = $('price').oninput = calc;
+$('justification').oninput = () => $('cnt').textContent = $('justification').value.length + '/500';
+function reset() { editId = null; $('f').reset(); calc(); $('cnt').textContent = '0/500'; }
+$('cancel').onclick = reset;
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  const rec = {name: v('name'), name_en: v('name_en') || null, unit: v('unit'), quantity: +v('quantity'),
+    specs: v('specs') || null, unit_price_usd: +v('price'), urgency: v('urgency'),
+    justification: v('justification') || null, justification_en: v('justification_en') || null,
+    origin_country: v('country') || null, manufacturers: v('manufacturers') || null};
+  const {error} = editId ? await sb.from('nl_needs').update(rec).eq('id', editId)
+                         : await sb.from('nl_needs').insert({...rec, enterprise_id: U.profile.enterprise_id});
+  if (error) return alert(error.message);
+  reset(); load();
+};
+async function load() {
+  rows = (await sb.from('nl_needs').select('*').order('created_at', {ascending: false})).data || [];
+  $('list').innerHTML = `<table><tr><th>Потреба</th><th>К-сть</th><th>Ціна, USD</th><th>Сума, USD</th><th>Терміновість</th><th>Країна / виробники</th><th>Статус</th><th></th></tr>` +
+    rows.map(n => `<tr><td><b>${esc(n.name)}</b><br><small>${esc(n.justification)}</small></td><td>${n.quantity} ${esc(n.unit)}</td>
+    <td class="r">${fmt(n.unit_price_usd)}</td><td class="r">${fmt(n.total_usd)}</td><td>${esc(n.urgency)}</td>
+    <td>${esc(n.origin_country)}<br><small>${esc(n.manufacturers)}</small></td><td>${STATUS[n.status]}</td>
+    <td><button class="ghost" onclick="edit('${n.id}')">Змінити</button> <button class="danger" onclick="del('${n.id}')">✕</button></td></tr>`).join('') +
+    `<tr><th colspan="3">Разом</th><th class="r">${fmt(rows.reduce((a, n) => a + Number(n.total_usd), 0))}</th><th colspan="4"></th></tr></table>`;
+}
+function edit(id) {
+  const n = rows.find(x => x.id === id); editId = id;
+  $('name').value = n.name; $('name_en').value = n.name_en || ''; $('unit').value = n.unit; $('quantity').value = n.quantity;
+  $('price').value = n.unit_price_usd; $('urgency').value = n.urgency; $('country').value = n.origin_country || '';
+  $('manufacturers').value = n.manufacturers || ''; $('specs').value = n.specs || '';
+  $('justification').value = n.justification || ''; $('justification_en').value = n.justification_en || '';
+  calc(); $('cnt').textContent = $('justification').value.length + '/500'; scrollTo(0, 0);
+}
+async function del(id) {
+  if (!confirm('Видалити позицію?')) return;
+  const {error} = await sb.from('nl_needs').delete().eq('id', id);
+  if (error) return alert(error.message); load();
+}
+</script></body></html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Контроль якості потреб — NeedsList</title><link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0a2540"><script src="pwa.js" defer></script>
+</head>
+<body>
+<header id="top"></header>
+<main class="qa-main">
+  <div class="dash-head">
+    <div><h2>Контроль якості заявок</h2><p class="muted">Перевірка повноти, узгодженості та готовності даних до передавання міжнародним партнерам</p></div>
+    <div class="qa-actions noprint"><button id="refresh" class="ghost">Оновити перевірку</button><button id="exportCsv" class="ghost">Експорт CSV</button><button id="print" class="ghost">Друк / PDF</button></div>
+  </div>
+  <section id="summary" class="qa-kpis" aria-live="polite"><p class="muted">Завантаження даних…</p></section>
+  <section class="card noprint qa-filter">
+    <label>Підприємство<select id="enterprise"><option value="">Усі підприємства</option></select></label>
+    <label>Рівень проблеми<select id="severity"><option value="">Усі рівні</option><option value="critical">Критичні</option><option value="warning">Попередження</option><option value="info">Інформаційні</option></select></label>
+    <label>Стан готовності<select id="readiness"><option value="">Усі</option><option value="ready">Готові (85–100%)</option><option value="review">Потребують доопрацювання (60–84%)</option><option value="low">Низька готовність (0–59%)</option></select></label>
+    <label>Пошук<input id="query" placeholder="Назва потреби / підприємство"></label>
+  </section>
+  <section id="results" aria-live="polite"></section>
+  <p class="muted qa-footnote">Перевірка є автоматизованим контролем якості даних, а не технічною, фінансовою чи юридичною експертизою. Вона не змінює записи в базі. Порогові значення та зауваження є внутрішніми правилами підготовки даних і не замінюють офіційні вимоги конкретного донора.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script><script src="common.js"></script>
+<script>
+let user, needs=[], enterprises=[], sectors=[], destinations=[], checked=[];
+const money=n=>Number(n||0).toLocaleString('uk-UA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const norm=s=>String(s||'').toLocaleLowerCase('uk').normalize('NFKC').replace(/[\s\p{P}\p{S}]+/gu,' ').trim();
+const add=(a,severity,code,title,detail)=>a.push({severity,code,title,detail});
+function inspect(n, maps, duplicateIds){
+ const issues=[]; const qtyRaw=n.quantity, priceRaw=n.unit_price_usd, totalRaw=n.total_usd; const qty=Number(qtyRaw), price=Number(priceRaw), total=Number(totalRaw);
+ if(!String(n.name||'').trim()) add(issues,'critical','NAME_EMPTY','Не зазначено назву потреби','Заповніть найменування потреби.');
+ if(!String(n.unit||'').trim()) add(issues,'critical','UNIT_EMPTY','Не зазначено одиницю виміру','Вкажіть одиницю виміру (шт., комплект, одиниця тощо).');
+ if(qtyRaw===null||qtyRaw===undefined||String(qtyRaw).trim()===''||!Number.isFinite(qty)||qty<=0) add(issues,'critical','QUANTITY_INVALID','Некоректна кількість','Кількість має бути числом, більшим за нуль.');
+ if(priceRaw===null||priceRaw===undefined||String(priceRaw).trim()===''||!Number.isFinite(price)||price<0) add(issues,'critical','PRICE_INVALID','Некоректна ціна','Ціна за одиницю має бути невід’ємним числом у USD.');
+ if(Number.isFinite(qty)&&qty>0&&Number.isFinite(price)&&price>=0&&Number.isFinite(total)){
+   const expected=qty*price, delta=Math.abs(expected-total), tolerance=Math.max(0.02,expected*0.001);
+   if(delta>tolerance) add(issues,'critical','TOTAL_MISMATCH','Неузгоджена загальна вартість',`Кількість × ціна = ${money(expected)} USD, у реєстрі: ${money(total)} USD.`);
+ } else if(totalRaw===null||totalRaw===undefined||String(totalRaw).trim()===''||!Number.isFinite(total)) add(issues,'critical','TOTAL_INVALID','Не визначена загальна вартість','Перевірте розрахунок загальної вартості в записі.');
+ if(!['нагальна','термінова','перспективна'].includes(String(n.urgency||''))) add(issues,'critical','URGENCY_INVALID','Не визначено коректну терміновість','Оберіть одне з передбачених значень терміновості.');
+ if(!['new','approved','rejected'].includes(String(n.status||''))) add(issues,'warning','STATUS_UNKNOWN','Невідомий статус запису','Перевірте статус потреби в адміністративній панелі.');
+ if(!String(n.name_en||'').trim()) add(issues,'warning','NAME_EN_MISSING','Відсутня англійська назва','Для англомовного звіту додайте переклад найменування.');
+ if(!String(n.justification||'').trim()) add(issues,'warning','JUSTIFICATION_MISSING','Відсутнє обґрунтування','Поясніть, чому потреба необхідна та які наслідки матиме її незадоволення.');
+ if(!String(n.justification_en||'').trim()) add(issues,'warning','JUSTIFICATION_EN_MISSING','Відсутнє обґрунтування англійською','Підготуйте англомовне обґрунтування для міжнародного подання.');
+ if(!String(n.specs||'').trim()) add(issues,'warning','SPECS_MISSING','Відсутні технічні характеристики','Додайте параметри, комплектацію, стандарти або функціональні вимоги, якщо вони застосовні.');
+ if(!n.sector_id||!maps.sectors[n.sector_id]) add(issues,'warning','SECTOR_MISSING','Не визначено сектор','Призначте сектор у розділі «Потреби».');
+ const ds=Array.isArray(n.destination_ids)?n.destination_ids:[];
+ if(!ds.length) add(issues,'warning','DESTINATION_MISSING','Не визначено адресата','Визначте міжнародний канал / адресата подання.');
+ else if(ds.some(id=>!maps.destinations[id]&&!maps.destinations[String(id)])) add(issues,'warning','DESTINATION_UNKNOWN','Містить невідомого адресата','Перевірте призначені адресати та актуальність довідника.');
+ if(!String(n.origin_country||'').trim()) add(issues,'info','COUNTRY_MISSING','Не зазначено країну походження','За можливості вкажіть країну походження або виробництва.');
+ if(!String(n.manufacturers||'').trim()) add(issues,'info','MANUFACTURER_MISSING','Не зазначено потенційного виробника','За наявності інформації вкажіть виробника / постачальника.');
+ if(duplicateIds.has(String(n.id))) add(issues,'warning','POSSIBLE_DUPLICATE','Можливий дублікат','Знайдено іншу позицію з такою самою нормалізованою назвою в того самого підприємства. Перевірте, чи це окрема потреба.');
+ if(Number.isFinite(price)&&price===0) add(issues,'info','ZERO_PRICE','Нульова ціна','Переконайтеся, що нульова ціна є навмисною, а не пропуском оцінки.');
+ const weights={critical:24,warning:9,info:2};
+ const score=Math.max(0,100-issues.reduce((s,x)=>s+weights[x.severity],0));
+ return {need:n,issues,score,band:score>=85?'ready':score>=60?'review':'low'};
+}
+function runChecks(){
+ const maps={sectors:Object.fromEntries(sectors.map(x=>[String(x.id),x])),destinations:Object.fromEntries(destinations.map(x=>[String(x.id),x]))};
+ const seen=new Map(), dup=new Set();
+ needs.forEach(n=>{const k=String(n.enterprise_id)+'|'+norm(n.name);if(!norm(n.name))return;if(seen.has(k)){dup.add(String(n.id));dup.add(String(seen.get(k).id));}else seen.set(k,n);});
+ checked=needs.map(n=>inspect(n,maps,dup));
+ render();
+}
+function render(){
+ const all=checked, count=s=>all.reduce((a,x)=>a+x.issues.filter(i=>i.severity===s).length,0);
+ const avg=all.length?Math.round(all.reduce((a,x)=>a+x.score,0)/all.length):0;
+ const ready=all.filter(x=>x.band==='ready').length;
+ $('summary').innerHTML=`<div class="qa-kpi"><span>Перевірено позицій</span><b>${all.length}</b><small>Усі доступні записи реєстру</small></div><div class="qa-kpi"><span>Середня готовність</span><b>${avg}%</b><small>${ready} позицій мають готовність від 85%</small></div><div class="qa-kpi critical"><span>Критичні зауваження</span><b>${count('critical')}</b><small>Потребують обов’язкового перегляду</small></div><div class="qa-kpi warning"><span>Попередження</span><b>${count('warning')}</b><small>Впливають на повноту подання</small></div><div class="qa-kpi"><span>Інформаційні</span><b>${count('info')}</b><small>Рекомендації щодо покращення</small></div>`;
+ const ent=$('enterprise').value, sev=$('severity').value, band=$('readiness').value, q=norm($('query').value);
+ const en=Object.fromEntries(enterprises.map(x=>[String(x.id),x.name]));
+ const list=all.filter(x=>{const n=x.need;return(!ent||String(n.enterprise_id)===ent)&&(!band||x.band===band)&&(!sev||x.issues.some(i=>i.severity===sev))&&(!q||norm((n.name||'')+' '+(en[String(n.enterprise_id)]||'')).includes(q));}).sort((a,b)=>a.score-b.score);
+ $('results').innerHTML=list.length?list.map(x=>{
+  const n=x.need, issues=x.issues.filter(i=>!sev||i.severity===sev);
+  const label=x.band==='ready'?'Готова до попереднього подання':x.band==='review'?'Потребує доопрацювання':'Низька готовність';
+  return `<article class="qa-item"><div class="qa-item-head"><div><h3>${esc(n.name||'Без назви')}</h3><p>${esc(en[String(n.enterprise_id)]||'Підприємство не визначено')} · ${esc(n.status||'Статус відсутній')} · ${esc(n.urgency||'Терміновість не визначена')}</p></div><div class="qa-score ${x.band}"><b>${x.score}%</b><small>${label}</small></div></div><div class="qa-meta"><span>Кількість: ${esc(n.quantity??'—')} ${esc(n.unit||'')}</span><span>Вартість: ${money(n.total_usd)} USD</span><span>Сектор: ${esc(sectors.find(s=>String(s.id)===String(n.sector_id))?.code||'Не визначено')}</span></div>${issues.length?`<ul class="qa-issues">${issues.map(i=>`<li class="${i.severity}"><b>${i.severity==='critical'?'Критично':i.severity==='warning'?'Увага':'Інформація'} · ${esc(i.title)}</b><span>${esc(i.detail)}</span><small>Код: ${i.code}</small></li>`).join('')}</ul>`:'<p class="qa-clean">Критичних зауважень і попереджень не виявлено.</p>'}</article>`;
+ }).join(''):'<div class="card">За вибраними критеріями позицій не знайдено.</div>';
+}
+async function load(){
+ $('results').innerHTML='<p class="muted">Завантаження записів і довідників…</p>';
+ const [nr,er,sr,dr]=await Promise.all([sb.from('nl_needs').select('*').order('created_at',{ascending:false}),sb.from('nl_enterprises').select('id,name').order('name'),sb.from('nl_sectors').select('id,code,name_ua').order('code'),sb.from('nl_destinations').select('id,name').order('name')]);
+ const failed=[nr,er,sr,dr].find(r=>r.error);if(failed){$('results').innerHTML=`<p class="err">Не вдалося завантажити дані: ${esc(failed.error.message)}</p>`;return;}
+ needs=nr.data||[];enterprises=er.data||[];sectors=sr.data||[];destinations=dr.data||[];
+ const selected=$('enterprise').value;$('enterprise').innerHTML='<option value="">Усі підприємства</option>'+enterprises.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');$('enterprise').value=selected;
+ runChecks();
+}
+function exportCsv(){
+ const rows=[['Підприємство','Потреба','Готовність, %','Рівень','Код','Зауваження','Рекомендація']];
+ const en=Object.fromEntries(enterprises.map(x=>[String(x.id),x.name]));
+ checked.forEach(x=>x.issues.forEach(i=>rows.push([en[String(x.need.enterprise_id)]||'',x.need.name||'',x.score,x.band,i.code,i.title,i.detail])));
+ const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='needslist_quality_assurance_'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+(async()=>{user=await requireUser('admin');if(!user)return;topbar(user);$('refresh').onclick=load;$('exportCsv').onclick=exportCsv;$('print').onclick=()=>window.print();['enterprise','severity','readiness','query'].forEach(id=>$(id).addEventListener('input',render));await load();})();
+</script>
+</body></html>

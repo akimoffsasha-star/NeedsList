@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Портфель міжнародних проєктів — NeedsList</title><link rel="stylesheet" href="style.css"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0a2540"><script src="pwa.js" defer></script>
+</head><body>
+<header id="top"></header>
+<main class="portfolio-main">
+  <div class="dash-head"><div><h2>Портфель міжнародних проєктів</h2><p class="muted">Облік поданих пропозицій, донорських рішень, фінансування та реалізації</p></div><div class="portfolio-actions"><button id="newProject">＋ Новий проєкт</button><button id="exportCsv" class="ghost">Експорт CSV</button><button id="backup" class="ghost">Резервна копія JSON</button><label class="button-like ghost" for="restoreFile">Імпорт JSON</label><input id="restoreFile" type="file" accept="application/json,.json" hidden></div></div>
+  <div id="portfolioAlert" aria-live="polite"></div>
+  <section id="portfolioKpis" class="portfolio-kpis"><div class="card muted">Завантаження портфеля…</div></section>
+  <section class="card portfolio-filters">
+    <label>Пошук<input id="search" placeholder="Назва, донор, номер, підприємство"></label>
+    <label>Статус<select id="statusFilter"><option value="">Усі статуси</option><option>Ідея</option><option>Підготовка</option><option>Подано</option><option>На розгляді</option><option>Потребує доопрацювання</option><option>Схвалено</option><option>Контрактування</option><option>Реалізується</option><option>Призупинено</option><option>Завершено</option><option>Відхилено</option></select></label>
+    <label>Партнер / донор<input id="donorFilter" placeholder="Назва донора"></label>
+    <label>Рік<input id="yearFilter" type="number" min="2000" max="2100" placeholder="Усі роки"></label>
+    <button id="clearFilters" class="ghost">Скинути фільтри</button>
+  </section>
+  <section class="portfolio-layout">
+    <div class="card portfolio-list-card"><div class="section-heading"><h3>Реєстр проєктів</h3><span id="resultCount" class="muted"></span></div><div class="table-scroll"><table class="portfolio-table"><thead><tr><th>Проєкт / референс</th><th>Партнер</th><th>Статус</th><th>Дедлайн / наступна дата</th><th class="num">Запитано, USD</th><th class="num">Погоджено, USD</th><th></th></tr></thead><tbody id="projectRows"><tr><td colspan="7" class="muted">Завантаження…</td></tr></tbody></table></div></div>
+    <aside class="card portfolio-side"><h3>Контроль портфеля</h3><div id="portfolioAlerts" class="portfolio-alerts"><p class="muted">Формування переліку контрольних подій…</p></div><h3 class="side-subtitle">Фінансовий стан</h3><div id="financeSummary"></div><p class="muted small-note">Фінансові показники відображають значення, внесені адміністратором. Вони не є банківським підтвердженням надходжень або витрат.</p></aside>
+  </section>
+  <p class="muted portfolio-footnote">Портфель призначений для внутрішнього управління. Статуси, суми, дедлайни та результати мають підтверджуватися відповідальними особами документами донора, контрактами й фінансовою звітністю.</p>
+</main>
+<div id="projectModal" class="modal-backdrop" hidden><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h2 id="modalTitle">Новий проєкт</h2><button id="closeModal" class="ghost" aria-label="Закрити">✕</button></div>
+<form id="projectForm"><input id="recordId" type="hidden"><div class="portfolio-form-grid">
+<label class="wide">Назва проєкту *<input id="pTitle" required maxlength="240" placeholder="Назва проєкту"></label>
+<label>Донор / міжнародний партнер *<input id="pDonor" required maxlength="180" placeholder="Європейська комісія, UNDP…"></label>
+<label>Програма / конкурс<input id="pProgram" maxlength="180"></label>
+<label>Ідентифікатор / номер заявки<input id="pRef" maxlength="120"></label>
+<label>Профіль звітності<select id="pProfile"><option value="generic">Універсальний</option><option value="undp">UNDP</option><option value="eu">Європейський Союз</option><option value="wb">World Bank</option><option value="imo">IMO</option><option value="other">Інший</option></select></label>
+<label>Підприємство / бенефіціар<input id="pBeneficiary" maxlength="240"></label>
+<label>Відповідальна особа<input id="pOwner" maxlength="180"></label>
+<label>Електронна адреса контакту<input id="pEmail" type="email" maxlength="180"></label>
+<label>Поточний статус<select id="pStatus"><option>Ідея</option><option>Підготовка</option><option>Подано</option><option>На розгляді</option><option>Потребує доопрацювання</option><option>Схвалено</option><option>Контрактування</option><option>Реалізується</option><option>Призупинено</option><option>Завершено</option><option>Відхилено</option></select></label>
+<label>Дата подання<input id="pSubmitted" type="date"></label>
+<label>Дедлайн конкурсу / відповіді<input id="pDeadline" type="date"></label>
+<label>Наступна контрольна дата<input id="pNextDate" type="date"></label>
+<label>Назва контрольної події<input id="pNextEvent" maxlength="180" placeholder="Наприклад, подання уточнень"></label>
+<label>Запитуване фінансування, USD<input id="pRequested" type="number" min="0" step="0.01" value="0"></label>
+<label>Погоджене фінансування, USD<input id="pApproved" type="number" min="0" step="0.01" value="0"></label>
+<label>Підписаний бюджет / контракт, USD<input id="pContracted" type="number" min="0" step="0.01" value="0"></label>
+<label>Отримано / перераховано, USD<input id="pDisbursed" type="number" min="0" step="0.01" value="0"></label>
+<label>Витрачено, USD<input id="pSpent" type="number" min="0" step="0.01" value="0"></label>
+<label>Початок реалізації<input id="pStart" type="date"></label>
+<label>Завершення реалізації<input id="pEnd" type="date"></label>
+<label class="wide">Мета та очікуваний результат<textarea id="pOutcome" rows="2"></textarea></label>
+<label class="wide">Ключові етапи та контрольні результати<textarea id="pMilestones" rows="3" placeholder="Один етап на рядок; за можливості — дата та відповідальна сторона"></textarea></label>
+<label class="wide">Ризики / проблеми / залежності<textarea id="pRisks" rows="3"></textarea></label>
+<label class="wide">Посилання на документи / папку проєкту<input id="pUrl" type="url" placeholder="https://…"></label>
+<label class="wide">Примітки та підстава останнього оновлення<textarea id="pNotes" rows="2"></textarea></label>
+</div><div id="formError" class="proposal-errors" hidden></div><div class="modal-actions"><button type="button" id="cancelForm" class="ghost">Скасувати</button><button type="submit">Зберегти проєкт</button></div></form></section></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="common.js"></script>
+<script>
+const TABLE='nl_projects';
+const FIELDS=['title','donor','program','reference_no','profile','beneficiary','owner','contact_email','status','submitted_at','deadline','next_date','next_event','requested_usd','approved_usd','contracted_usd','disbursed_usd','spent_usd','start_date','end_date','outcome','milestones','risks','documents_url','notes'];
+const FORM={title:'pTitle',donor:'pDonor',program:'pProgram',reference_no:'pRef',profile:'pProfile',beneficiary:'pBeneficiary',owner:'pOwner',contact_email:'pEmail',status:'pStatus',submitted_at:'pSubmitted',deadline:'pDeadline',next_date:'pNextDate',next_event:'pNextEvent',requested_usd:'pRequested',approved_usd:'pApproved',contracted_usd:'pContracted',disbursed_usd:'pDisbursed',spent_usd:'pSpent',start_date:'pStart',end_date:'pEnd',outcome:'pOutcome',milestones:'pMilestones',risks:'pRisks',documents_url:'pUrl',notes:'pNotes'};
+let user, projects=[];
+const val=id=>$(id).value.trim();
+const money=n=>Number(n||0).toLocaleString('uk-UA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const dateText=d=>d?new Date(d+'T00:00:00').toLocaleDateString('uk-UA'):'—';
+const today=()=>new Date().toISOString().slice(0,10);
+(async()=>{user=await requireUser('admin');if(!user)return;topbar(user);bind();await loadProjects();})();
+function bind(){
+ $('newProject').onclick=()=>openForm();$('closeModal').onclick=closeForm;$('cancelForm').onclick=closeForm;
+ $('projectModal').addEventListener('click',e=>{if(e.target===$('projectModal'))closeForm()});
+ $('projectForm').onsubmit=saveProject;
+ ['search','statusFilter','donorFilter','yearFilter'].forEach(id=>$(id).addEventListener('input',render));
+ $('clearFilters').onclick=()=>{['search','statusFilter','donorFilter','yearFilter'].forEach(id=>$(id).value='');render()};
+ $('exportCsv').onclick=exportCsv;$('backup').onclick=backupJson;$('restoreFile').onchange=restoreJson;
+}
+async function loadProjects(){
+ $('projectRows').innerHTML='<tr><td colspan="7" class="muted">Завантаження портфеля…</td></tr>';
+ const {data,error}=await sb.from(TABLE).select('*').order('updated_at',{ascending:false});
+ if(error){$('portfolioAlert').innerHTML=`<div class="proposal-errors"><b>Не вдалося завантажити портфель.</b><br>${esc(error.message)}<p>Перевірте застосування SQL-міграції <code>sql/001_create_nl_projects.sql</code> та політики доступу Supabase.</p></div>`;projects=[];render();return;}
+ projects=data||[];$('portfolioAlert').innerHTML='';render();
+}
+function filtered(){const q=val('search').toLowerCase(),st=val('statusFilter'),d=val('donorFilter').toLowerCase(),y=val('yearFilter');return projects.filter(p=>(!q||[p.title,p.donor,p.reference_no,p.beneficiary,p.program].some(x=>String(x||'').toLowerCase().includes(q)))&&(!st||p.status===st)&&(!d||String(p.donor||'').toLowerCase().includes(d))&&(!y||String(p.submitted_at||p.created_at||'').slice(0,4)===y));}
+function render(){const list=filtered(),sum=k=>projects.reduce((a,p)=>a+Number(p[k]||0),0),count=s=>projects.filter(p=>p.status===s).length;
+ $('portfolioKpis').innerHTML=`<article class="portfolio-kpi"><span>Проєктів у портфелі</span><b>${projects.length}</b><small>${new Set(projects.map(p=>p.donor).filter(Boolean)).size} партнерів / донорів</small></article><article class="portfolio-kpi"><span>Запитуване фінансування</span><b>${money(sum('requested_usd'))} $</b><small>Сума заявок</small></article><article class="portfolio-kpi"><span>Погоджене фінансування</span><b>${money(sum('approved_usd'))} $</b><small>Зафіксовані рішення донорів</small></article><article class="portfolio-kpi"><span>Підписані бюджети</span><b>${money(sum('contracted_usd'))} $</b><small>Контракти / угоди</small></article><article class="portfolio-kpi"><span>Отримано коштів</span><b>${money(sum('disbursed_usd'))} $</b><small>За внесеними даними</small></article><article class="portfolio-kpi"><span>Активна реалізація</span><b>${count('Реалізується')}</b><small>${count('На розгляді')} на розгляді · ${count('Підготовка')} готується</small></article>`;
+ $('resultCount').textContent=`${list.length} із ${projects.length}`;
+ $('projectRows').innerHTML=list.length?list.map(p=>`<tr><td><b>${esc(p.title)}</b><br><small>${esc(p.reference_no||'Без номера')} · ${esc(p.beneficiary||'Бенефіціар не зазначений')}</small></td><td>${esc(p.donor)}</td><td><span class="project-status ${statusClass(p.status)}">${esc(p.status)}</span></td><td>${dateText(p.deadline)}<br><small>${p.next_date?`Наступна: ${dateText(p.next_date)}${p.next_event?' · '+esc(p.next_event):''}`:'Контрольну дату не визначено'}</small></td><td class="num">${money(p.requested_usd)}</td><td class="num">${money(p.approved_usd)}</td><td><button class="small ghost" data-edit="${p.id}">Відкрити</button></td></tr>`).join(''):'<tr><td colspan="7" class="muted">За заданими умовами проєктів не знайдено.</td></tr>';
+ $('projectRows').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openForm(projects.find(p=>p.id===b.dataset.edit)));
+ renderAlerts();renderFinance();
+}
+function statusClass(s){return ({'Схвалено':'good','Реалізується':'good','Завершено':'good','Відхилено':'bad','Призупинено':'warn','Потребує доопрацювання':'warn','На розгляді':'info','Подано':'info','Контрактування':'info'})[s]||'';}
+function renderAlerts(){const t=today(),items=[];projects.forEach(p=>{if(p.deadline&&p.deadline>=t&&p.deadline<=addDays(t,30)&&!['Завершено','Відхилено'].includes(p.status))items.push({date:p.deadline,title:p.title,detail:`Дедлайн: ${dateText(p.deadline)}`,kind:'warn'});if(p.next_date&&p.next_date>=t&&p.next_date<=addDays(t,30))items.push({date:p.next_date,title:p.title,detail:p.next_event||'Контрольна дата',kind:'info'});if(p.next_date&&p.next_date<t&&!['Завершено','Відхилено'].includes(p.status))items.push({date:p.next_date,title:p.title,detail:'Прострочена контрольна дата',kind:'bad'});});items.sort((a,b)=>a.date.localeCompare(b.date));$('portfolioAlerts').innerHTML=items.length?items.slice(0,10).map(x=>`<div class="portfolio-alert ${x.kind}"><b>${esc(x.title)}</b><span>${esc(x.detail)}</span><small>${dateText(x.date)}</small></div>`).join(''):'<p class="muted">Немає контрольних подій у межах найближчих 30 днів.</p>';}
+function addDays(d,n){const x=new Date(d+'T00:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)}
+function renderFinance(){const requested=projects.reduce((a,p)=>a+Number(p.requested_usd||0),0),approved=projects.reduce((a,p)=>a+Number(p.approved_usd||0),0),contracted=projects.reduce((a,p)=>a+Number(p.contracted_usd||0),0),disbursed=projects.reduce((a,p)=>a+Number(p.disbursed_usd||0),0),spent=projects.reduce((a,p)=>a+Number(p.spent_usd||0),0),pct=(a,b)=>b?Math.min(100,a/b*100):0;$('financeSummary').innerHTML=`${[['Погоджено від запитаного',approved,requested],['Контрактовано від погодженого',contracted,approved],['Отримано від контрактованого',disbursed,contracted],['Витрачено від отриманого',spent,disbursed]].map(([n,a,b])=>`<div class="finance-row"><div><span>${n}</span><b>${money(a)} / ${money(b)} USD</b></div><div class="finance-track"><i style="width:${pct(a,b)}%"></i></div></div>`).join('')}`;}
+function openForm(p){$('projectForm').reset();$('recordId').value=p?.id||'';Object.entries(FORM).forEach(([k,id])=>$(id).value=p?.[k]??(k==='profile'?'generic':k==='status'?'Ідея':['requested_usd','approved_usd','contracted_usd','disbursed_usd','spent_usd'].includes(k)?0:''));$('modalTitle').textContent=p?'Редагувати проєкт':'Новий проєкт';$('formError').hidden=true;$('projectModal').hidden=false;document.body.classList.add('modal-open');}
+function closeForm(){$('projectModal').hidden=true;document.body.classList.remove('modal-open');}
+async function saveProject(e){e.preventDefault();const rec={};Object.entries(FORM).forEach(([k,id])=>{let x=$(id).value.trim();rec[k]=['requested_usd','approved_usd','contracted_usd','disbursed_usd','spent_usd'].includes(k)?Number(x||0):(x||null)});const err=[];if(!rec.title)err.push('Вкажіть назву проєкту.');if(!rec.donor)err.push('Вкажіть донора або міжнародного партнера.');if(Object.keys(rec).filter(k=>k.endsWith('_usd')).some(k=>rec[k]<0||!Number.isFinite(rec[k])))err.push('Фінансові значення мають бути невід’ємними числами.');if(rec.approved_usd>rec.requested_usd&&rec.requested_usd>0)err.push('Погоджена сума перевищує запитувану — перевірте дані.');if(rec.contracted_usd>rec.approved_usd&&rec.approved_usd>0)err.push('Сума контракту перевищує погоджену — перевірте дані.');if(rec.spent_usd>rec.disbursed_usd&&rec.disbursed_usd>0)err.push('Витрати перевищують отримані кошти — перевірте дані.');if(rec.start_date&&rec.end_date&&rec.end_date<rec.start_date)err.push('Дата завершення передує даті початку.');if(err.length){$('formError').innerHTML='<b>Перевірте дані:</b><ul>'+err.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>';$('formError').hidden=false;return;}
+ const id=$('recordId').value;let result;if(id)result=await sb.from(TABLE).update(rec).eq('id',id);else result=await sb.from(TABLE).insert({...rec,created_by:user.session.user.id});if(result.error){$('formError').textContent='Не вдалося зберегти: '+result.error.message;$('formError').hidden=false;return;}closeForm();await loadProjects();}
+function csvCell(x){return '"'+String(x??'').replace(/"/g,'""')+'"'}
+function exportCsv(){const cols=[['title','Назва'],['donor','Донор'],['program','Програма'],['reference_no','Номер'],['status','Статус'],['beneficiary','Бенефіціар'],['submitted_at','Дата подання'],['deadline','Дедлайн'],['requested_usd','Запитано USD'],['approved_usd','Погоджено USD'],['contracted_usd','Контракт USD'],['disbursed_usd','Отримано USD'],['spent_usd','Витрачено USD'],['next_date','Наступна дата'],['next_event','Подія'],['owner','Відповідальний'],['outcome','Результат'],['risks','Ризики'],['documents_url','Документи']];const rows=[cols.map(x=>csvCell(x[1])).join(';'),...filtered().map(p=>cols.map(c=>csvCell(p[c[0]] )).join(';'))];download('\ufeff'+rows.join('\r\n'),'needslist_project_portfolio.csv','text/csv;charset=utf-8');}
+function backupJson(){download(JSON.stringify({schema:'needslist-portfolio-backup-v1',exported_at:new Date().toISOString(),projects},null,2),'needslist_portfolio_backup.json','application/json');}
+function download(content,name,type){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
+async function restoreJson(e){const f=e.target.files[0];if(!f)return;try{const obj=JSON.parse(await f.text()),arr=Array.isArray(obj)?obj:obj.projects;if(!Array.isArray(arr))throw new Error('У файлі не знайдено масив projects.');if(!confirm(`Імпортувати ${arr.length} записів? Наявні записи не видалятимуться; записи з id будуть оновлені.`))return;for(const raw of arr){const rec={};FIELDS.forEach(k=>{if(raw[k]!==undefined)rec[k]=raw[k]});if(!rec.title||!rec.donor)continue;if(raw.id){const {error}=await sb.from(TABLE).upsert({...rec,id:raw.id},{onConflict:'id'});if(error)throw error;}else{const {error}=await sb.from(TABLE).insert({...rec,created_by:user.session.user.id});if(error)throw error;}}await loadProjects();alert('Імпорт завершено.');}catch(err){alert('Помилка імпорту: '+err.message)}finally{e.target.value='';}}
+</script></body></html>

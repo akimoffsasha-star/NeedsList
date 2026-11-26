@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Звіти та міжнародні запити</title><link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0a2540"><script src="pwa.js" defer></script>
+</head>
+<body>
+<header id="top"></header>
+<main class="report-main">
+<section class="card grid noprint report-controls">
+  <label>Формат документа<select id="profile"><option value="international">Міжнародний проєкт / донорський звіт</option><option value="register">Реєстр потреб (табличний)</option></select></label>
+  <label>Профіль міжнародного партнера<select id="donorProfile"><option value="generic">Універсальний донорський формат</option><option value="undp">UNDP — Results-Based Management</option><option value="eu">Європейський Союз — External Action</option><option value="wb">World Bank — Investment Project Financing</option><option value="imo">IMO — Technical Cooperation</option></select></label>
+  <label>Назва проєкту / програми<input id="project" placeholder="Наприклад: Recovery of Maritime Transport"></label>
+  <label>Ідентифікатор проєкту<input id="projectId" placeholder="Project ID / Reference"></label>
+  <label>Звітний період<input id="period" placeholder="01.01.2026 – 31.12.2026"></label>
+  <label>Тривалість проєкту<input id="duration" placeholder="Наприклад: 24 months"></label>
+  <label>Виконавець / координатор<input id="implementer" placeholder="Implementing partner / lead agency"></label>
+  <label>Контактна особа<input id="contact" placeholder="ПІБ, посада, e-mail"></label>
+  <label class="wide">Мета / очікуваний результат проєкту<textarea id="objective" rows="2" placeholder="Project objective / intended outcome"></textarea></label>
+  <div id="profileFields" class="wide profile-fields"></div>
+  <label>Мова звіту<select id="lang"><option value="en">English</option><option value="uk">Українська</option></select></label>
+  <label>Куди подавати<select id="dest"></select></label>
+  <label>Підприємство<select id="ent"></select></label>
+  <label>Сектор<select id="sec"></select></label>
+  <label>Терміновість<select id="urg"><option value="">Усі</option><option>нагальна</option><option>термінова</option><option>перспективна</option></select></label>
+  <label>Статус<select id="st"><option value="approved">Лише схвалені</option><option value="">Усі</option><option value="new">Нові</option><option value="rejected">Відхилені</option></select></label>
+  <label>Сума позиції від, USD<input id="min" type="number" min="0" step="0.01"></label>
+  <label>Сума позиції до, USD<input id="max" type="number" min="0" step="0.01"></label>
+  <div class="wide report-actions"><button id="go">Сформувати звіт</button><button id="xl" class="ghost">Excel</button><button id="csv" class="ghost">CSV</button><button id="pr" class="ghost">Друк / PDF</button><button id="qaLink" class="ghost" hidden>Контроль якості заявок</button></div>
+</section>
+<div id="out" aria-live="polite"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script><script src="common.js"></script>
+<script>
+const T={
+ en:{title:'Needs Assessment and Resource Requirements',subtitle:'Consolidated needs overview',summary:'Executive Summary',register:'Detailed Needs Register',sector:'Sector Overview',enterprise:'Submitting Entities',priority:'Priority Breakdown',method:'Scope and Methodology',scope:'Reporting Scope',items:'Number of requirements',amount:'Total estimated amount',approved:'Approved requirements',urgent:'Immediate priority',total:'TOTAL',destination:'Submission channel',generated:'Date of issue',project:'Project / programme',noData:'No records match the selected criteria.',disclaimer:'This document consolidates information submitted by participating entities. Cost estimates and technical descriptions are based on the information available in the register and have not been independently validated unless stated otherwise.',priorityNames:{'нагальна':'Immediate','термінова':'Urgent','перспективна':'Prospective'},none:'Not assigned',unit:'Unit',qty:'Quantity',unitPrice:'Unit price (USD)',totalPrice:'Total (USD)',specs:'Technical specifications',justification:'Needs justification',country:'Country of origin',manufacturers:'Potential manufacturers',sectorCol:'Sector',entity:'Entity',need:'Description of need'},
+ uk:{title:'Оцінка потреб та ресурсні потреби',subtitle:'Зведений огляд потреб',summary:'Резюме',register:'Детальний перелік потреб',sector:'Огляд за секторами',enterprise:'Підприємства-заявники',priority:'Розподіл за терміновістю',method:'Обсяг та методологія',scope:'Параметри звіту',items:'Кількість потреб',amount:'Загальна орієнтовна вартість',approved:'Схвалені потреби',urgent:'Нагальні потреби',total:'РАЗОМ',destination:'Канал подання',generated:'Дата формування',project:'Проєкт / програма',noData:'За вибраними критеріями записів не знайдено.',disclaimer:'Документ узагальнює інформацію, подану підприємствами-учасниками. Вартісні оцінки та технічні описи наведено за даними реєстру; незалежна перевірка цих відомостей не здійснювалася, якщо інше прямо не зазначено.',priorityNames:{'нагальна':'Нагальна','термінова':'Термінова','перспективна':'Перспективна'},none:'Не визначено',unit:'Од. виміру',qty:'Кількість',unitPrice:'Ціна одиниці (USD)',totalPrice:'Сума (USD)',specs:'Технічні характеристики',justification:'Обґрунтування потреби',country:'Країна походження',manufacturers:'Потенційні виробники',sectorCol:'Сектор',entity:'Підприємство',need:'Найменування потреби'}
+};
+const URG_EN={'нагальна':'Immediate','термінова':'Urgent','перспективна':'Prospective'};
+let U,data=[],destMap={},entMap={},secMap={};
+const val=id=>$(id).value;
+(async()=>{
+ U=await requireUser();if(!U)return;topbar(U);if(U.profile.role==='admin'){$('qaLink').hidden=false;$('qaLink').onclick=()=>location.href='qa.html';}
+ const [e,s,d]=await Promise.all([sb.from('nl_enterprises').select('id,name,name_en').order('name'),sb.from('nl_sectors').select('id,code,name_ua,name_en').order('code'),sb.from('nl_destinations').select('*').order('name')]);
+ if([e,s,d].some(x=>x.error)){alert('Не вдалося завантажити довідники');return;}
+ (e.data||[]).forEach(x=>entMap[x.id]=x);(s.data||[]).forEach(x=>secMap[x.id]=x);(d.data||[]).forEach(x=>destMap[x.id]=x);
+ const opts=(arr,first,fn)=>`<option value="">${first}</option>`+arr.map(x=>`<option value="${x.id}">${esc(fn(x))}</option>`).join('');
+ $('dest').innerHTML=opts(d.data||[],'Усі адресати',x=>x.name);$('ent').innerHTML=opts(e.data||[],'Усі підприємства',x=>x.name);$('sec').innerHTML=opts(s.data||[],'Усі сектори',x=>x.code+' — '+x.name_ua);
+ if(U.profile.role!=='admin'){$('st').value='';$('ent').value=U.profile.enterprise_id||'';$('ent').disabled=true;}
+ $('go').onclick=run;$('lang').onchange=()=>{renderProfileFields();render();};$('profile').onchange=render;$('donorProfile').onchange=()=>{renderProfileFields();render();};$('xl').onclick=()=>exp('xlsx');$('csv').onclick=()=>exp('csv');$('pr').onclick=()=>window.print();
+ renderProfileFields();await run();
+})();
+let activeDonorProfile='generic';
+const PROFILE_INPUTS={};
+const PROFILE_META={
+ generic:{name:'Universal donor format',nameUk:'Універсальний донорський формат',fields:[['approach','Підхід / компонент проєкту','Project approach / component','textarea'],['risks','Ризики та заходи реагування','Key risks and mitigation measures','textarea'],['sustainability','Стійкість результатів','Sustainability of results','textarea']]},
+ undp:{name:'UNDP Results-Based Management profile',nameUk:'Профіль UNDP — управління, орієнтоване на результати',fields:[['outcome','Outcome / результат вищого рівня','Outcome statement','textarea'],['outputs','Outputs / безпосередні результати','Outputs / deliverables','textarea'],['indicators','Показники, базові та цільові значення','Indicators; baseline; target; actual value','textarea'],['verification','Джерела перевірки результатів','Means / sources of verification','textarea'],['risks','Реєстр ризиків: подія, ймовірність, вплив, власник, реагування','Risk log: event, likelihood, impact, owner, treatment','textarea'],['lessons','Висновки та засвоєні уроки','Lessons learned','textarea']]},
+ eu:{name:'EU External Action profile',nameUk:'Профіль ЄС — зовнішня діяльність',fields:[['action','Опис дії та робочі пакети','Action description and work packages','textarea'],['results','Очікувані результати та індикатори','Expected results and indicators','textarea'],['budget','Бюджетні категорії / орієнтовний розподіл','Budget headings / indicative allocation','textarea'],['procurement','План закупівель: предмет, лот, процедура, строки','Procurement plan: subject, lot, procedure, timeline','textarea'],['crosscutting','Наскрізні питання: рівність, довкілля, клімат, доступність','Cross-cutting issues: equality, environment, climate, accessibility','textarea'],['cofinancing','Співфінансування та внески партнерів','Co-financing and partner contributions','textarea']]},
+ wb:{name:'World Bank IPF profile',nameUk:'Профіль Світового банку — інвестиційне фінансування проєктів',fields:[['component','Компонент / підкомпонент проєкту','Project component / subcomponent','textarea'],['implementation','Стан реалізації та ключові етапи','Implementation status and key milestones','textarea'],['procurement','План закупівель: категорія, метод, пакет, статус','Procurement plan: category, method, package, status','textarea'],['esf','Екологічні та соціальні ризики / заходи','Environmental and social risks / measures','textarea'],['financial','Фінансове виконання та джерела фінансування','Financial implementation and financing sources','textarea'],['constraints','Проблеми реалізації та коригувальні заходи','Implementation issues and corrective actions','textarea']]},
+ imo:{name:'IMO Technical Cooperation profile',nameUk:'Профіль ІМО — технічне співробітництво',fields:[['instrument','Інструменти ІМО / конвенції та кодекси, яких стосується потреба','Relevant IMO instruments / conventions and codes','textarea'],['gap','Виявлена прогалина спроможності / технічна потреба','Identified capacity gap / technical need','textarea'],['beneficiaries','Країна, установи та цільові бенефіціари','Country, institutions and target beneficiaries','textarea'],['assistance','Запитувана технічна допомога: експертиза, навчання, обладнання','Requested technical assistance: expertise, training, equipment','textarea'],['outputs','Очікувані результати та показники спроможності','Expected outputs and capacity indicators','textarea'],['sustainability','Національна відповідальність і сталість після завершення допомоги','National ownership and post-assistance sustainability','textarea']]}
+};
+function renderProfileFields(){
+ const previous=PROFILE_META[activeDonorProfile];
+ if(previous) previous.fields.forEach(f=>{const el=$('pf_'+f[0]);if(el)PROFILE_INPUTS[activeDonorProfile]??={},PROFILE_INPUTS[activeDonorProfile][f[0]]=el.value;});
+ const key=val('donorProfile')||'generic',p=PROFILE_META[key],en=val('lang')==='en';activeDonorProfile=key;
+ $('profileFields').innerHTML=`<div class="profile-heading"><b>${en?p.name:p.nameUk}</b><span>${en?'Profile-specific reporting information. Empty fields will be clearly marked as not provided.':'Дані для профілю партнера. Незаповнені поля будуть позначені як такі, що не надані.'}</span></div><div class="profile-field-grid">${p.fields.map(f=>`<label>${en?f[2]:f[1]}<textarea id="pf_${f[0]}" rows="2" placeholder="${en?'Not provided unless completed':'Заповніть за наявності інформації'}">${esc(PROFILE_INPUTS[key]?.[f[0]]||'')}</textarea></label>`).join('')}</div>`;
+}
+function profileValues(){const p=PROFILE_META[val('donorProfile')||'generic'];return p.fields.map(f=>({key:f[0],label:val('lang')==='en'?f[2]:f[1],value:$('pf_'+f[0])?.value.trim()||''}));}
+function metadataRows(){const en=val('lang')==='en';return [
+ [en?'Project / programme':'Проєкт / програма',val('project')],[en?'Project reference':'Ідентифікатор проєкту',val('projectId')],[en?'Reporting period':'Звітний період',val('period')],[en?'Project duration':'Тривалість проєкту',val('duration')],[en?'Implementing partner / lead agency':'Виконавець / координатор',val('implementer')],[en?'Contact person':'Контактна особа',val('contact')],[en?'Objective / intended outcome':'Мета / очікуваний результат',val('objective')],...profileValues().map(x=>[x.label,x.value])];}
+function donorSection(lg){
+ const p=PROFILE_META[val('donorProfile')||'generic'],vals=profileValues(),en=lg==='en';
+ const name=en?p.name:p.nameUk;
+ return `<section class="report-section donor-profile-section"><h2>08 · ${en?'Partner-specific reporting profile':'Профіль звітності партнера'}: ${esc(name)}</h2><p class="muted">${en?'This is a structured working profile, not a substitute for the donor’s signed grant agreement, official template or portal requirements.':'Це структурований робочий профіль, а не заміна підписаної грантової угоди, офіційного шаблону чи вимог порталу донора.'}</p><table class="summary-table"><thead><tr><th>${en?'Required reporting element':'Елемент звітності'}</th><th>${en?'Information provided':'Надана інформація'}</th></tr></thead><tbody>${vals.map(x=>`<tr><td>${esc(x.label)}</td><td>${x.value?esc(x.value).replace(/\n/g,'<br>'):`<span class="missing">${en?'Not provided in the source register / report inputs':'Не надано в реєстрі / параметрах звіту'}</span>`}</td></tr>`).join('')}</tbody></table></section>`;
+}
+async function run(){
+ let q=sb.from('nl_needs').select('*,enterprises:nl_enterprises(name,name_en),sectors:nl_sectors(code,name_ua,name_en)');
+ if(val('dest'))q=q.contains('destination_ids',[+val('dest')]);if(val('ent'))q=q.eq('enterprise_id',val('ent'));if(val('sec'))q=q.eq('sector_id',val('sec'));if(val('urg'))q=q.eq('urgency',val('urg'));if(val('st'))q=q.eq('status',val('st'));if(val('min'))q=q.gte('total_usd',+val('min'));if(val('max'))q=q.lte('total_usd',+val('max'));
+ const {data:d,error}=await q;if(error){alert(error.message);return;}data=(d||[]).sort((a,b)=>(a.sectors?.code||'~').localeCompare(b.sectors?.code||'~')||(a.enterprises?.name||'').localeCompare(b.enterprises?.name||''));render();
+}
+const entityName=(n,lg)=>lg==='en'?(n.enterprises?.name_en||n.enterprises?.name||''):n.enterprises?.name||'';
+const sectorName=(n,lg)=>n.sectors?(lg==='en'?(n.sectors.name_en||n.sectors.name_ua):n.sectors.name_ua):T[lg].none;
+const needName=(n,lg)=>lg==='en'?(n.name_en||n.name):n.name;
+const priority=(n,lg)=>lg==='en'?URG_EN[n.urgency]||n.urgency:T[lg].priorityNames[n.urgency]||n.urgency;
+function rows(lg){return data.map((n,i)=>[i+1,entityName(n,lg),needName(n,lg),n.unit,+n.quantity,n.specs||'',+n.unit_price_usd,+n.total_usd,priority(n,lg),lg==='en'?(n.justification_en||n.justification||''):(n.justification||''),n.origin_country||'',n.manufacturers||'',sectorName(n,lg)]);}
+function grouped(keyFn){const m=new Map();data.forEach(n=>{const k=keyFn(n)||'—';const a=m.get(k)||{count:0,sum:0};a.count++;a.sum+=Number(n.total_usd||0);m.set(k,a);});return [...m.entries()].map(([name,v])=>({name,...v})).sort((a,b)=>b.sum-a.sum);}
+function render(){
+ const lg=val('lang'),t=T[lg],list=rows(lg),total=data.reduce((a,n)=>a+Number(n.total_usd||0),0),approved=data.filter(n=>n.status==='approved').length,immediate=data.filter(n=>n.urgency==='нагальна').length,dest=destMap[val('dest')],project=val('project').trim();
+ const cols=lg==='en'?['#',t.entity,t.need,t.unit,t.qty,t.specs,t.unitPrice,t.totalPrice,'Priority',t.justification,t.country,t.manufacturers,t.sectorCol]:['№',t.entity,t.need,t.unit,t.qty,t.specs,t.unitPrice,t.totalPrice,'Терміновість',t.justification,t.country,t.manufacturers,t.sectorCol];
+ const sumTable=(title,arr)=>`<section class="report-section"><h2>${title}</h2><table class="summary-table"><thead><tr><th>${t.entity}</th><th>${lg==='en'?'Items':'Позицій'}</th><th>${t.totalPrice}</th></tr></thead><tbody>${arr.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.count}</td><td class="num">${fmt(x.sum)}</td></tr>`).join('')||`<tr><td colspan="3">—</td></tr>`}</tbody></table></section>`;
+ const priorityRows=['нагальна','термінова','перспективна'].map(k=>{const a=data.filter(n=>n.urgency===k);return {name:t.priorityNames[k],count:a.length,sum:a.reduce((v,n)=>v+Number(n.total_usd||0),0)};});
+ const sectorGroups=grouped(n=>sectorName(n,lg)),entityGroups=grouped(n=>entityName(n,lg));
+ const table=`<div class="table-scroll"><table class="needs-register"><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${list.map(r=>`<tr>${r.map((c,i)=>`<td class="${[4,6,7].includes(i)?'num':''}">${[6,7].includes(i)?fmt(c):esc(c)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="13">${t.noData}</td></tr>`}</tbody><tfoot><tr><th colspan="7">${t.total}</th><th class="num">${fmt(total)}</th><th colspan="5"></th></tr></tfoot></table></div>`;
+ const register=val('profile')==='register';
+ $('out').innerHTML=`<article class="report-document ${register?'register-document':''}">
+ <header class="report-cover"><div class="report-kicker">${lg==='en'?'RESOURCE MOBILIZATION · NEEDS ASSESSMENT':'ЗАЛУЧЕННЯ РЕСУРСІВ · ОЦІНКА ПОТРЕБ'}</div><h1>${t.title}</h1><p class="report-subtitle">${t.subtitle}</p><div class="cover-meta"><div><span>${t.project}</span><b>${esc(project||'—')}</b></div><div><span>${t.destination}</span><b>${esc(dest?.name||(lg==='en'?'All channels':'Усі адресати'))}</b></div><div><span>${t.generated}</span><b>${new Date().toLocaleDateString(lg==='en'?'en-GB':'uk-UA')}</b></div><div><span>${lg==='en'?'Document status':'Статус документа'}</span><b>${register?(lg==='en'?'Data register':'Реєстр даних'):(lg==='en'?'Consolidated project report':'Зведений проєктний звіт')}</b></div></div><div class="report-total"><span>${t.amount}</span><strong>${fmt(total)} USD</strong><small>${data.length} ${lg==='en'?'requirements':'позицій'}</small></div></header>
+ ${register?'':`<section class="report-section executive"><h2>01 · ${t.summary}</h2><p>${lg==='en'?`The register contains ${data.length} requirements with a combined estimated value of USD ${fmt(total)}. ${approved} requirements (${data.length?Math.round(approved/data.length*100):0}%) are approved. ${immediate} requirements are marked as immediate priority.`:`Реєстр містить ${data.length} потреб на загальну орієнтовну суму ${fmt(total)} USD. Схвалено ${approved} позицій (${data.length?Math.round(approved/data.length*100):0}%). ${immediate} позицій мають нагальну терміновість.`}</p><div class="summary-metrics"><div><b>${data.length}</b><span>${t.items}</span></div><div><b>${fmt(total)} USD</b><span>${t.amount}</span></div><div><b>${approved}</b><span>${t.approved}</span></div><div><b>${immediate}</b><span>${t.urgent}</span></div></div></section>
+ <section class="report-section"><h2>02 · ${t.scope}</h2><div class="scope-grid"><div><span>${lg==='en'?'Destination':'Адресат'}</span><b>${esc(dest?.name||(lg==='en'?'All':'Усі'))}</b></div><div><span>${lg==='en'?'Enterprise':'Підприємство'}</span><b>${esc(val('ent')?entMap[val('ent')]?.name:'—')}</b></div><div><span>${lg==='en'?'Sector':'Сектор'}</span><b>${esc(val('sec')?secMap[val('sec')]?.name_ua:'—')}</b></div><div><span>${lg==='en'?'Priority':'Терміновість'}</span><b>${esc(val('urg')|| (lg==='en'?'All':'Усі'))}</b></div><div><span>${lg==='en'?'Status':'Статус'}</span><b>${esc(val('st')|| (lg==='en'?'All':'Усі'))}</b></div><div><span>${lg==='en'?'Value range, USD':'Діапазон вартості, USD'}</span><b>${esc(val('min')||'0')} – ${esc(val('max')||'∞')}</b></div></div></section>
+ ${sumTable('03 · '+t.sector,sectorGroups)}${sumTable('04 · '+t.enterprise,entityGroups)}
+ <section class="report-section"><h2>05 · ${t.priority}</h2><table class="summary-table"><thead><tr><th>${lg==='en'?'Priority':'Терміновість'}</th><th>${lg==='en'?'Requirements':'Позицій'}</th><th>${t.totalPrice}</th></tr></thead><tbody>${priorityRows.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.count}</td><td class="num">${fmt(x.sum)}</td></tr>`).join('')}</tbody></table></section>`}
+ <section class="report-section register-section"><h2>${register?'': '06 · '}${t.register}</h2>${table}</section>
+ ${register?'':`<section class="report-section methodology"><h2>07 · ${t.method}</h2><p>${t.disclaimer}</p><p>${lg==='en'?'Currency: United States dollars (USD). Figures are presented as entered in the source register.':'Валюта: долар США (USD). Показники наведено відповідно до даних первинного реєстру.'}</p></section>`}
+ ${register?'':donorSection(lg)}
+ <footer class="report-footer"><span>${esc(project||t.title)}</span><span>${lg==='en'?'Generated from the NeedsList register':'Сформовано на основі реєстру NeedsList'}</span><span>${new Date().toLocaleDateString(lg==='en'?'en-GB':'uk-UA')}</span></footer></article>`;
+}
+function exp(type){
+ const lg=val('lang'),t=T[lg],list=rows(lg),total=data.reduce((a,n)=>a+Number(n.total_usd||0),0),cols=lg==='en'?['#',t.entity,t.need,t.unit,t.qty,t.specs,t.unitPrice,t.totalPrice,'Priority',t.justification,t.country,t.manufacturers,t.sectorCol]:['№',t.entity,t.need,t.unit,t.qty,t.specs,t.unitPrice,t.totalPrice,'Терміновість',t.justification,t.country,t.manufacturers,t.sectorCol];
+ const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([cols,...list,[t.total,'','','','','','',total]]);ws['!cols']=cols.map((_,i)=>({wch:[6,24,32,12,10,35,16,17,15,38,18,25,22][i]}));ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:list.length,c:cols.length-1}})};XLSX.utils.book_append_sheet(wb,ws,'Needs Register');
+ const addSummary=(name,arr)=>{const sh=XLSX.utils.aoa_to_sheet([[lg==='en'?'Group':'Група',lg==='en'?'Items':'Позицій','Total USD'],...arr.map(x=>[x.name,x.count,x.sum])]);sh['!cols']=[{wch:36},{wch:12},{wch:18}];XLSX.utils.book_append_sheet(wb,sh,name);};
+ const group=(fn)=>grouped(fn);addSummary('By Sector',group(n=>sectorName(n,lg)));addSummary('By Enterprise',group(n=>entityName(n,lg)));
+ const summary=XLSX.utils.aoa_to_sheet([[t.title],[t.project,val('project')],[t.destination,destMap[val('dest')]?.name||'All'],[t.generated,new Date().toLocaleDateString()],[t.items,data.length],[t.amount,total],[t.approved,data.filter(n=>n.status==='approved').length]]);XLSX.utils.book_append_sheet(wb,summary,'Executive Summary');
+ const meta=XLSX.utils.aoa_to_sheet([[lg==='en'?'Reporting element':'Елемент звітності',lg==='en'?'Value':'Значення'],[lg==='en'?'Partner profile':'Профіль партнера',PROFILE_META[val('donorProfile')||'generic'].name],...metadataRows()]);meta['!cols']=[{wch:42},{wch:90}];XLSX.utils.book_append_sheet(wb,meta,'Partner Profile');
+ const name=`needs_assessment_${(val('donorProfile')||'generic')}_${lg}_${new Date().toISOString().slice(0,10)}`;
+ if(type==='xlsx')return XLSX.writeFile(wb,name+'.xlsx');
+ const csv=XLSX.utils.sheet_to_csv(ws);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download=name+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+</script>
+</body></html>
